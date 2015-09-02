@@ -1,0 +1,292 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>lmoe by heltonmarx</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/github-light.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1>lmoe</h1>
+        <p>Last Man On Earth : Github Thoughts</p>
+
+        <p class="view"><a href="https://github.com/heltonmarx/lmoe">View the Project on GitHub <small>heltonmarx/lmoe</small></a></p>
+
+
+        <ul>
+          <li><a href="https://github.com/heltonmarx/lmoe/zipball/master">Download <strong>ZIP File</strong></a></li>
+          <li><a href="https://github.com/heltonmarx/lmoe/tarball/master">Download <strong>TAR Ball</strong></a></li>
+          <li><a href="https://github.com/heltonmarx/lmoe">View On <strong>GitHub</strong></a></li>
+        </ul>
+      </header>
+      <section>
+        <h2>
+<a id="cross-compile-go-using-buildroot" class="anchor" href="#cross-compile-go-using-buildroot" aria-hidden="true"><span class="octicon octicon-link"></span></a>Cross compile Go using Buildroot</h2>
+
+<p>This a simple tutorial to describe step-by-step how to 
+create an environment to cross compile <a href="https://golang.org/">Go</a> applications 
+to run on a <a href="http://beagleboard.org/black">BeagleBone Black</a> using 
+<a href="http://buildroot.uclibc.org/">Buildroot</a> toolchain.</p>
+
+<h3>
+<a id="requirements" class="anchor" href="#requirements" aria-hidden="true"><span class="octicon octicon-link"></span></a>Requirements</h3>
+
+<ul>
+<li>Buildroot (2015.02)</li>
+<li>Go (1.4.2)</li>
+<li>Ubuntu 14.04</li>
+<li>BeagleBone Black.</li>
+<li>It would be better execute buidroot and kernel install like <code>root</code>.</li>
+</ul>
+
+<h3>
+<a id="environment" class="anchor" href="#environment" aria-hidden="true"><span class="octicon octicon-link"></span></a>Environment</h3>
+
+<p>Install essential things first</p>
+
+<pre><code>apt-get update
+apt-get install -y build-essential libncurses5-dev \
+        bzr cvs git mercurial rsync subversion \
+        libc6 libstdc++6 libncurses5 zlib1g lzop u-boot-tools \
+        tftpd-hpa nfs-kernel-server sqlite3 picocom
+</code></pre>
+
+<h3>
+<a id="buildroot" class="anchor" href="#buildroot" aria-hidden="true"><span class="octicon octicon-link"></span></a>Buildroot</h3>
+
+<p>Download and extract the Buildroot release (e.g: <em>2015.02</em>) on <code>/opt/toolchain/</code> directory:</p>
+
+<pre><code>mkdir -p /opt/toolchain
+cd /opt/toolchain
+wget http://buildroot.uclibc.org/downloads/buildroot-2015.02.tar.gz
+tar -xzvf buildroot-2015.02.tar.gz
+cd buildroot-2015.02
+</code></pre>
+
+<p>It's already have a previous configuration to BeagleBone Black describe in
+<code>configs/beaglebone_defconfig</code>, so, it's a nice way to follow.</p>
+
+<p>Invoke those commands bellow to generate a <code>Makefile</code> and configure the system:</p>
+
+<pre><code>make beaglebone_defconfig
+make menuconfig
+</code></pre>
+
+<p>Here are some settings you should change on buildroot config
+(yeah!...I'll use sqlite...)</p>
+
+<pre><code>Target Options ---&gt;
+    ARM instruction set (Thumb2)
+Toolchain ---&gt;
+    Toolchain type (Buildroot toolchain) ---&gt;
+    Kernel Headers (Linux 3.12x kernel headers) ---&gt;
+    C library (eglibc) ---&gt;
+    [*] Enable C++ support
+    [*] Build cross gdb for the host
+    [*] Purge unwanted locales
+    (C en_US de fr pt_br) Locales to keep
+    (en_US) Generate locale data
+    [*] Enable MMU support
+    [*] Register toolchain within Eclipse Buildroot plug-in
+System configuration ---&gt;
+    [*] Install timezone info
+    (default) timezone list
+    (America/Sao_Paulo) default local time
+Kernel ---&gt;
+    [] Linux Kernel
+Target packages ---&gt;
+    Libraries ---&gt;
+        Database ---&gt;
+            [*] sqlite
+                [*] Command-line editing
+                [*] Additional query optmizations (stat3)
+                [*] Enable version 3 of the full-text search engine
+    Network applications ---&gt;
+        [*] dhcpd
+        [*] iptables
+        [*] iputils
+        [*] openssh
+Filesystem images ---&gt;
+    [*]tar the root filesystem
+        Compression method (no compression)
+</code></pre>
+
+<p>Save, exit and initiate a full system build (This will take a while...):</p>
+
+<pre><code>make all
+</code></pre>
+
+<p>OK, get the <code>u-boot</code> files and move them to a more visible directory (e.g.:<code>/opt/toolchain/output/</code>):</p>
+
+<pre><code>mkdir -p /opt/toolchain/output
+cp -a /opt/toolchain/buildroot-2015.02/output/images/MLO /opt/toolchain/output/
+cp -a /opt/toolchain/buildroot-2015.02/output/images/u-boot.img /opt/toolchain/output/
+cp -a /opt/toolchain/buildroot-2015.02/output/images/Env.txt /opt/toolchain/output/
+</code></pre>
+
+<p>Now, run to the hills...</p>
+
+<h3>
+<a id="linux-kernel-312" class="anchor" href="#linux-kernel-312" aria-hidden="true"><span class="octicon octicon-link"></span></a>Linux kernel 3.12</h3>
+
+<p>Download the Linux kernel 3.12 directly from BeagleBone Github repository:</p>
+
+<pre><code>mkdir -p /opt/toolchain/linux
+git clone -b 3.12 git://github.com/beagleboard/kernel.git /opt/toolchain/linux
+cd /opt/toolchain/linux
+bash ./patch.sh
+cp configs/beaglebone kernel/arch/arm/configs/beaglebone_defconfig
+wget http://arago-project.org/git/projects/?p=am33x-cm3.git\;a=blob_plain\;f=bin/am335x-pm-firmware.bin\;hb=HEAD -O kernel/firmware/am335x-pm-firmware.bin
+</code></pre>
+
+<p>Setting the <code>arm-linux-gcc</code> to your <code>$PATH</code>:</p>
+
+<pre><code>export PATH=$PATH:/opt/toolchain/buildroot-2015.02/output/host/usr/bin/
+
+</code></pre>
+
+<p>Compile and generate an uImage file with a DTB blob, and kernel modules (This will take a while,again...)</p>
+
+<pre><code>cd /opt/toolchain/linux/kernel
+make ARCH=arm CROSS_COMPILE=arm-linux- beaglebone_defconfig -j2
+make ARCH=arm CROSS_COMPILE=arm-linux- uImage dtbs LOADADDR=0x80008000 -j2
+make ARCH=arm CROSS_COMPILE=arm-linux- modules -j2
+</code></pre>
+
+<p>Copy uImage and DTB file to <code>/opt/toolchain/output</code> directory:</p>
+
+<pre><code>cp -a /opt/toolchain/linux/kernel/arch/arm/boot/uImage /opt/toolchain/output
+cp -a /opt/toolchain/linux/kernel/arch/arm/boot/dts/am335x-boneblack.dtb /opt/toolchain/output/
+</code></pre>
+
+<h3>
+<a id="rootfs" class="anchor" href="#rootfs" aria-hidden="true"><span class="octicon octicon-link"></span></a>Rootfs</h3>
+
+<p>Untar rootfs generated by buildroot to install kernel modules:</p>
+
+<pre><code>mkdir -p /opt/toolchain/rootfs
+tar -xvf /opt/toolchain/buildroot-2015.02/output/images/rootfs.tar -C /opt/toolchain/rootfs
+make ARCH=arm CROSS_COMPILE=arm-linux- INSTALL_MOD_PATH=/opt/toolchain/rootfs modules_install
+make ARCH=arm CROSS_COMPILE=arm-linux- INSTALL_MOD_PATH=/opt/toolchain/rootfs firmware_install
+</code></pre>
+
+<h3>
+<a id="nfs" class="anchor" href="#nfs" aria-hidden="true"><span class="octicon octicon-link"></span></a>NFS</h3>
+
+<p>The great advantage of using NFS is that you compile binaries on your development environment,
+install binaries and export them, have instant response on your target system.</p>
+
+<p>Edit <code>/etc/exports</code> file, including the following line:</p>
+
+<pre><code>/opt/toolchain/rootfs   *(rw,sync,fsid=0,no_root_squash,crossmnt,no_subtree_check,no_acl)
+</code></pre>
+
+<p>So, restart the NFS service: <code>/etc/init.d/nfs-kernel-server restart</code>.</p>
+
+<p>Copy uboot files and kernel uImage to <code>tftpboot</code> directory:</p>
+
+<pre><code>mkdir -p /var/lib/tftpboot/boot/
+cp -a /opt/toolchain/output/uImage /var/lib/tftpboot/boot/
+cp -a /opt/toolchain/output/MLO /var/lib/tftpboot/boot/
+cp -a /opt/toolchain/output/u-boot.img /var/lib/tftpboot/boot/
+cp -a /opt/toolchain/output/am335x-boneblack.dtb /var/lib/tftpboot/boot/
+</code></pre>
+
+<p>Connect the BeagleBone to your serial port via uart1 (Debug Serial Header), and set commands in u-boot,
+to load your linux kernel from tftp and rootfs over NFS:</p>
+
+<pre><code>set ipaddr 192.168.0.15
+set serverip 192.168.0.50
+set gateway_ip 192.168.0.1
+set rootpath '/opt/toolchain/rootfs/production'
+
+set loadtftp 'tftpboot 0x80200000 /boot/uImage; tftpboot 0x815f0000 /boot/am335x-boneblack.dtb'
+set netargs 'setenv bootargs console=${console} ${optargs} root=/dev/nfs nfsroot=${serverip}:${rootpath},${nfsopts} rw ip=dhcp'
+set uenvcmd 'setenv autoload no;run loadtftp; run netargs; bootm 0x80200000 - 0x815f0000'
+
+run uenvcmd
+</code></pre>
+
+<h3>
+<a id="go" class="anchor" href="#go" aria-hidden="true"><span class="octicon octicon-link"></span></a>Go</h3>
+
+<p>1.4.2 it's a good start, I'll check go 1.5 later.</p>
+
+<h4>
+<a id="install-go" class="anchor" href="#install-go" aria-hidden="true"><span class="octicon octicon-link"></span></a>Install go</h4>
+
+<pre><code>wget https://storage.googleapis.com/golang/go1.4.2.linux-amd64.tar.gz
+tar -xzvf go1.4.2.linux-amd64.tar.gz -C /opt/
+cd /opt/go/src
+GOOS=linux GOARCH=arm ./make.bash --no-clean
+rm go1.4.2.linux-amd64.tar.gz
+</code></pre>
+
+<p>Feel more confortable using a local GOPATH like:</p>
+
+<pre><code>cd $HOME
+mkdir -p go
+</code></pre>
+
+<p>Set my <code>$USER</code> profile (<code>.bashrc</code>):</p>
+
+<pre><code>export GOROOT="/opt/go"
+export GOPATH="$HOME/go"
+export PATH=$PATH:/opt/go/bin
+</code></pre>
+
+<h4>
+<a id="cross-compilation" class="anchor" href="#cross-compilation" aria-hidden="true"><span class="octicon octicon-link"></span></a>Cross compilation</h4>
+
+<p>Create a simple go app:</p>
+
+<pre><code>package main.go
+
+import "fmt"
+
+func main() {
+    fmt.Printf("Hello BeagleBone Black\n")
+}
+</code></pre>
+
+<p>Using <code>Makefile</code> to the dirty job:</p>
+
+<pre><code>TARGET := hello
+
+all:
+    go build -o $(TARGET) $^
+
+beagle:
+    CC=arm-linux-gcc CGO_ENABLED="1" GOARM=7 GOARCH=arm GOOS=linux go build -o $(TARGET) $^
+
+clean:
+    go clean
+
+install:
+    cp -a $(TARGET) /opt/toolchain/rootfs/root/
+</code></pre>
+
+<p>Compile and install (copy TARGET to rootfs directory):</p>
+
+<pre><code>make beagle ; make install
+</code></pre>
+
+<p>Voilà, we have a cross-compiled go binary ready to running on a BeagleBone Black.</p>
+      </section>
+      <footer>
+        <p>This project is maintained by <a href="https://github.com/heltonmarx">heltonmarx</a></p>
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="javascripts/scale.fix.js"></script>
+    
+  </body>
+</html>
